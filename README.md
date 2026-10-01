@@ -1,89 +1,180 @@
 # MartX Care — AI-assisted refund support
 
-React + Vite, Express, PostgreSQL, and an optional OpenAI classifier. Includes 15 customers and 21 orders from the supplied assessment files. This application simulates refunds; it never moves money.
+A full-stack assessment application that receives customer refund requests, checks stored orders against a defined policy, and returns **Approved**, **Denied**, or **Escalated**. Support staff can inspect decision evidence and resolve requests requiring human review.
 
-## Run with Docker
+**Refunds are simulated. No payment is issued.** Real AI classification is optional at startup but must be enabled and demonstrated to verify the assessment’s AI requirement.
 
-Install Docker Desktop, then from this directory:
+## At a glance
+
+- React + Vite customer form and support workspace.
+- Express API with validation, rate limiting, authenticated support routes, and safe retry handling.
+- PostgreSQL with 15 synthetic customers and 21 orders; embedded PGlite for development without Docker.
+- Optional OpenAI message classification; fixed policy code controls verdicts and amounts.
+- PostgreSQL transactions, order locks, and decision audit records.
+- Docker Compose services for the frontend, backend, and database.
+
+## Documentation
+
+| Guide | Contents |
+|---|---|
+| [Architecture](docs/ARCHITECTURE.md) | Request flow, data model, AI boundary, design decisions, limitations |
+| [API reference](docs/API.md) | Endpoints, payloads, validation, authentication, retries, errors |
+| [Refund policy](docs/refund_policy.md) | Business rules R1–R7 and precedence |
+| [Operations](docs/OPERATIONS.md) | Environment variables, AI activation, hosted database setup, troubleshooting |
+| [Scenarios](docs/SCENARIOS.md) | Seeded cases and prompt-injection examples |
+| [Demo walkthrough](docs/DEMO.md) | Recording plan and assessment handoff checklist |
+| [Verification](docs/VERIFICATION.md) | Checks completed and outstanding evidence |
+
+## Quick start: Docker
+
+Prerequisite: Docker with Compose. Run from the repository root:
 
 ```sh
-cp .env.example .env
-# Optional: set OPENAI_API_KEY in .env to enable real AI classification.
 docker compose up --build
 ```
 
-Open http://localhost:8080. The legacy `docker-compose up --build` command also works if installed. Support token defaults to `local-demo-support-token`; change it in `.env` before exposing this application. Without a key the interface explicitly shows offline demo mode.
+Open **http://localhost:8080**. The supplied Compose configuration starts PostgreSQL, Express, and Nginx serving the React build. On a new database volume, it initializes the schema and synthetic data automatically. Defaults support an offline local demonstration; the support token is `local-demo-support-token` unless overridden.
 
-PostgreSQL persists in a named volume. Seed dates are relative to database initialization, not each app restart. For a deliberately fresh demo dataset, `docker compose down -v` deletes ALL demo data; then start again. SQL initialization scripts run only on empty volumes. Apply future migrations explicitly to existing databases.
+To configure real AI or change demo settings, create `.env` only if it does not already exist:
+
+```sh
+# This preserves an existing .env file.
+[ -f .env ] || cp .env.example .env
+```
+
+Edit `.env` and set `OPENAI_API_KEY` and your chosen `ADMIN_TOKEN`, then rerun `docker compose up --build`. Compose uses its bundled PostgreSQL database even if your local `.env` contains a different `DATABASE_URL`.
+
+Useful commands:
+
+```sh
+docker compose ps
+docker compose logs --tail=100 backend
+curl http://localhost:8080/api/health
+docker compose down
+```
+
+`docker compose down` preserves database data. Seed dates are relative to the first initialization; restarting does not reset orders or refresh dates. See [Operations](docs/OPERATIONS.md) for a deliberately destructive demo reset.
+
+The legacy `docker-compose` command may be used if that is the installed Compose executable. An actual container run remains an outstanding verification item; configuration alone is not proof of successful startup.
 
 ## Local development without Docker
 
-Node 22.12+ is required. With no DATABASE_URL, the backend uses PGlite (embedded PostgreSQL) persisted in `backend/data`.
+Use Node.js 22.12+ on the Node 22 line, or a compatible newer release, and npm.
 
 ```sh
 npm ci
-cp .env.example .env
+[ -f .env ] || cp .env.example .env
+```
+
+For the embedded database, leave `DATABASE_URL=` empty in `.env`. Keep `ADMIN_TOKEN` populated.
+
+Start the API:
+
+```sh
 npm run dev:api
-# In another terminal:
+```
+
+In another terminal:
+
+```sh
 npm run dev:web
 ```
 
-Open the Vite URL (normally http://localhost:5173). Vite proxies `/api` to port 3001. Run `npm test` for policy and HTTP integration checks; `npm run build` compiles the frontend. Tests use a fresh in-memory PostgreSQL instance and make no paid API calls.
+Open the URL printed by Vite, normally **http://localhost:5173**. Vite proxies `/api` to port 3001. If that frontend port is occupied, Vite may choose another. PGlite initializes the database automatically and persists it in `backend/data` when started with the root workspace command.
+
+A populated `DATABASE_URL` selects external PostgreSQL instead. External databases must be initialized explicitly; connection details are in [Operations](docs/OPERATIONS.md).
+
+## Try the customer and support flows
+
+1. Open **Customer care**.
+2. Under **Take it for a test drive**, choose a seeded scenario.
+3. Click **Check my refund** and inspect the decision, amount, rule IDs, and request reference.
+4. Choose **Human review** to submit the $720 laptop request.
+5. Open **Support workspace** and enter the `ADMIN_TOKEN` used by the running backend.
+6. Click **Load requests**, select the order, and inspect classification and policy evidence.
+7. Enter a review note of at least 10 characters, then approve or deny the pending request.
+
+Expected examples on fresh data:
+
+| Scenario | Order | Expected outcome |
+|---|---|---|
+| Standard return | MX-1001 | Approved, $60 |
+| Final sale | MX-1002 | Denied, $0 |
+| Human review | MX-1004 | Escalated, $720 eligible |
+| Damaged item | MX-1005 | Approved, $85 |
+| Mixed basket | MX-1009 | Approved, $90; final-sale items excluded |
+
+Actual classification may cause additional review when live AI identifies uncertainty. Approvals persist: a new submission for an already-refunded order is denied. A pending review also prevents another request for the same order.
+
+## How AI is used
+
+The classifier extracts a reason, confidence, injection flag, and ambiguity flag from the customer message. The policy engine then makes the decision using verified database records. AI cannot choose an amount, modify records directly, or override a hard denial.
+
+| Mode | Meaning |
+|---|---|
+| `offline` | No API key; local keyword matching, not an LLM |
+| `openai` | A provider response was received and passed schema validation |
+| `unavailable` | Provider failure, timeout, refusal, or invalid output; low-confidence review path |
+| `skipped` | Email/order ownership check failed; no classification call made |
+
+The header and `/api/health` describe **configured** AI mode. They do not prove a successful provider call. Verify live AI using `aiMode: "openai"` in an actual refund response and `mode: "openai"` in its classification audit entry.
+
+Customer-facing replies are generated from controlled templates. The application does not upload or retrieve policy documents, answer general policy questions, or maintain a chat conversation. To change policy behavior, update both [the written policy](docs/refund_policy.md) and [the policy engine](backend/src/policy.js), then adjust scenarios and tests.
 
 ## Architecture
 
 ```text
-React request form / support workspace
-              | same-origin /api
-        Express + validation + rate limit
-              | verified email/order lookup
-      Untrusted message → intent classifier
-              | reason, confidence, safety flags
-      Deterministic policy engine (R1–R7)
-              | transaction + order row lock
-       PostgreSQL requests + audit logs
+React customer form / support workspace
+                 |
+     Vite proxy or Nginx /api proxy
+                 |
+ Express: validation, rate limits, support authentication
+                 |
+        Email + order ownership lookup
+                 |
+ Optional classifier: untrusted message -> intent and flags
+                 |
+ Deterministic policy: order + items + history + flags
+                 |
+ PostgreSQL transaction: request + order change + audit
 ```
 
-The supplied policy in `docs/refund_policy.md` defines rule precedence. Amounts are calculated in integer cents from stored items; customer text and AI outputs cannot set amounts or verdicts. UTC calendar days determine the delivery window, including all of day 30. Hard denials precede escalation. A mixed basket refunds eligible items only. Approvals mark the simulated order refunded in the same transaction as the request and audit log, preventing duplicate processing. Human decisions recheck hard eligibility rules and are recorded separately from the original verdict.
+Source map:
 
-## AI integration
+```text
+backend/src/app.js       API routes and transactional request handling
+backend/src/ai.js        Message prefilter and optional AI classifier
+backend/src/policy.js    Eligibility rules and customer reply templates
+backend/src/db.js        PostgreSQL/PGlite adapter
+backend/src/server.js    Startup and shutdown
+backend/test/            Policy, HTTP, and mocked AI tests
+frontend/src/main.jsx   Customer and support interfaces
+frontend/src/style.css  Visual styling and responsive layout
+db/                     Schema, seed data, and request-column migration
+docs/                   Supporting documentation
+docker-compose.yml      Local three-service stack
+.github/workflows/      Automated verification configuration
+```
 
-Set `OPENAI_API_KEY` on the backend only. `OPENAI_MODEL` defaults to `gpt-4.1-mini` and can be set to a compatible model available to your account. The Responses API uses strict structured output for reason, confidence, injection and ambiguity. Only the submitted message is transmitted after ownership verification; CRM records are not sent. Storage is disabled in the request. See [OpenAI structured outputs](https://developers.openai.com/api/docs/guides/structured-outputs).
+## Verification
 
-A deterministic prefilter is combined with model safety flags. Model refusals, timeouts, invalid JSON and provider failures become low-confidence human escalations (unless a hard policy denial applies). With no key, a labelled local classifier enables reproducible demos. Customer-facing replies are deterministic templates so model-generated text cannot promise unauthorized payments. The AI performs useful intent triage; it is not the policy authority.
+```sh
+npm test
+npm run build
+```
 
-## API
+Tests use a fresh in-memory PGlite database and mocked provider calls. They make no paid AI calls. The latest local validation passed all 9 tests and the frontend production build. Tests cover the 15 seeded scenarios, date and amount boundaries, selected injection attempts, ownership redaction, protected admin routes, input limits, retries, duplicate prevention, audit entries, and human resolution.
 
-- `GET /api/health`: database availability and configured AI mode.
-- `POST /api/refunds`: `{email, orderId, message, idempotencyKey}`. UUID key required. Returns ID, verdict, eligible amount, rule IDs, reply and actual classification mode.
-- `GET /api/admin/refunds`: latest 100 requests, newest first.
-- `GET /api/admin/refunds/:id/audit`: structured decision evidence.
-- `POST /api/admin/refunds/:id/resolve`: `{verdict: "Approved" | "Denied", note}`. Note must contain 10–1,000 characters.
+Docker startup, live AI calls, and Supabase connectivity are separate verification tasks. See [the verification record](docs/VERIFICATION.md) for scope and remaining work.
 
-Admin endpoints require `Authorization: Bearer <ADMIN_TOKEN>`. The UI holds that token only in memory. Input errors return 400, invalid credentials 401, missing requests 404, duplicate/conflicting operations 409 and rate limits 429. Requests use parameterized SQL; React escapes rendered messages. No public endpoint lists customer records. UUID idempotency keys are bound to the request contents. The request form preserves the key after a network failure for safe retries.
+## Scope and trade-offs
 
-## Assumptions and trade-offs
+This is a refund-decision demonstration, not a production payment service. Email plus order ID is a demo ownership check, and staff use one shared token. There is no payment settlement, email delivery, customer account system, or customer-facing review-status endpoint. Whole-order requests exclude final-sale items; additional item-level refunds are not supported. A partially refunded mixed basket is marked refunded at order level.
 
-- Email + order ID is the assessment's ownership check, **not production authentication**. Before a real deployment, add verified customer sessions, staff identities/RBAC, account-level rate limiting, and retention controls.
-- This version handles whole-order requests with final-sale exclusions. Ambiguous or item-specific requests should receive human review; robust item-level selection is a future extension. Offline classification is intentionally simpler than the model.
-- A partially refunded mixed basket is marked refunded at order level. Additional item-level refunds are outside scope.
-- One pending review per order. An in-transit order cannot be approved; support should deny/close it and request a new submission after delivery.
-- Review within one business day is sample policy copy, not an operational service guarantee.
-- No payment processor, email delivery, real refund settlement or persistent customer conversation is implemented.
-- The single shared support token and in-process rate limiter suit this local assessment, not a multi-tenant production service.
-- Audit records contain application evidence, not private model chain-of-thought. Raw customer messages remain in the database and should be subject to an appropriate retention policy.
+The code separates UI, HTTP handling, AI classification, policy, and persistence. Routes and UI remain compact, concentrated modules; larger deployments would benefit from further modularization. [Architecture](docs/ARCHITECTURE.md) explains the reliability safeguards and remaining limitations.
 
-## Hosting handoff — what to provide and when
+## Assessment handoff
 
-Nothing from Vercel or Supabase is required for local Docker execution.
+Repository: [cercuit-ola/martx-refund](https://github.com/cercuit-ola/martx-refund).
 
-1. **Real AI verification:** add your OpenAI API key directly to local `.env`; do not commit it or paste it into chat. Tell the developer once configured.
-2. **GitHub submission:** provide your GitHub username / target repository and an authenticated GitHub connection. Source is ready to upload; a public repository has not yet been created.
-3. **Supabase (optional hosted database):** create a project and supply its backend PostgreSQL connection string securely as DATABASE_URL. Run `db/01-schema.sql`, `02-seed.sql`, then `03-requests.sql` against a fresh database. Do not expose these tables through public anon access; keep them backend-only and configure RLS/privileges before public hosting. Never place database credentials in Vite variables.
-4. **Hosted application:** the Docker stack can run on a container host. Vercel can host the built frontend, but this repository currently expects a same-origin `/api` proxy to a separately hosted Express backend. Provide the Vercel project and backend hosting choice when ready; deployment rewrites and hosted security configuration still need to be configured and verified.
-5. **Demo video:** use `docs/DEMO.md` for the walkthrough after a fresh seed. The required narrated video and live AI verification are pending.
-
-## Verification status
-
-Consult `docs/VERIFICATION.md` for checks actually performed. Docker configuration is supplied, but a real container run requires Docker, which was not installed in the build environment. Do not treat source or embedded PostgreSQL tests as proof of a Docker/Supabase deployment.
-# martx-refund
+Before submitting, confirm the repository contains the latest source, its CI run passes, a clean Docker startup works, at least one real AI request is demonstrated, and a short walkthrough video is linked in the submission. Follow [the demo guide](docs/DEMO.md). Supabase and a public application deployment are optional; the assessment can run entirely through Compose.

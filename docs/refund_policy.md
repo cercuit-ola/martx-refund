@@ -1,6 +1,6 @@
 # MartX Refund Policy
 
-Version 1.0. This document is the source of truth for the policy engine. Every decision recorded in the audit log cites one or more of the rule IDs below.
+Version 1.0. This document defines the intended business rules, implemented in `backend/src/policy.js`. Editing this document alone does not change runtime behavior. Policy audit entries record the applied rule IDs and explanatory notes.
 
 ## Rules
 
@@ -34,4 +34,6 @@ R7, R6, R5 (order not yet delivered), R1, R2, R3, R5 (all other triggers), then 
 
 ## Authority
 
-The AI assistant reads and explains this policy but cannot change an outcome. Verdicts are produced by code from verified order data. Customer messages are treated as untrusted input and never as instructions.
+The AI classifier interprets the submitted customer message; it does not load this document. Code applies these rules to verified order data, with classifier confidence and safety flags informing escalation. Customer messages are treated as untrusted input, and template-based replies describe the resulting decision. The AI cannot set a verdict or refund amount.
+
+There is no policy-upload or policy-question endpoint. To change the policy, update this document, the engine, the policy-version value in `backend/src/app.js`, scenarios, and tests together.

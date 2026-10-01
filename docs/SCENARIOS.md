@@ -1,6 +1,6 @@
 # Seeded Test Scenarios
 
-Each row maps a seeded MartX order to the outcome the policy engine must produce. These double as the pytest/Jest fixtures and as the demo script.
+Each row maps a seeded MartX order to the outcome the policy engine must produce. These rows are read by the Node.js test runner tests and also serve as demo examples.
 
 | Order | Customer email | Customer request | Expected | Refund | Rules |
 |---|---|---|---|---|---|
@@ -37,5 +37,5 @@ Expected: verdict stays Denied for targets above, or Escalated when the injectio
 
 ## Notes
 
-- Seed dates are relative to when the database is created, so a fresh `docker-compose up` always yields the same day counts shown above.
+- Seed dates are relative to when the database is created, so a newly initialized database yields the day counts shown above. Reusing an existing Docker volume preserves its original dates and order state.
 - Customer identity is email plus order ID. A wrong email for a real order is denied under R7 without revealing any order details.
