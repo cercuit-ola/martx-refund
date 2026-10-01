@@ -59,7 +59,7 @@ docker compose down
 
 `docker compose down` preserves database data. Seed dates are relative to the first initialization; restarting does not reset orders or refresh dates. See [Operations](docs/OPERATIONS.md) for a deliberately destructive demo reset.
 
-The legacy `docker-compose` command may be used if that is the installed Compose executable. An actual container run remains an outstanding verification item; configuration alone is not proof of successful startup.
+The legacy `docker-compose` command may be used if that is the installed Compose executable. Docker images were built and the three-service stack started successfully on 1 October 2026. The customer and support API smoke checks passed through Nginx on port 8080 in offline classification mode.
 
 ## Local development without Docker
 
@@ -169,7 +169,7 @@ npm run build
 
 Tests use a fresh in-memory PGlite database and mocked provider calls. They make no paid AI calls. The latest local validation passed all 9 tests and the frontend production build. Tests cover the 15 seeded scenarios, date and amount boundaries, selected injection attempts, ownership redaction, protected admin routes, input limits, retries, duplicate prevention, audit entries, and human resolution.
 
-Docker startup, live AI calls, and Supabase connectivity are separate verification tasks. See [the verification record](docs/VERIFICATION.md) for scope and remaining work.
+Docker startup and the containerized refund API workflow have been verified. Live AI calls and Supabase connectivity remain separate, outstanding verification tasks. See [the verification record](docs/VERIFICATION.md) for scope and remaining work.
 
 ## Scope and trade-offs
 

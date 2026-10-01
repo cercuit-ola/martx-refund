@@ -35,6 +35,14 @@ export function createApp(db,ai=classify) {
     }); res.status(201).json(publicResult(saved));
   });
   app.use('/api/admin',(req,res,next)=>{const expected=process.env.ADMIN_TOKEN;const token=req.headers.authorization?.replace(/^Bearer /,'')||'';if(!expected||Buffer.byteLength(token)!==Buffer.byteLength(expected)||!timingSafeEqual(Buffer.from(token),Buffer.from(expected)))return res.status(401).json({error:'A valid support access token is required.'});next();});
+  app.get('/api/admin/refunds/stats',async(req,res)=>{
+    const {rows}=await db.query(`SELECT count(*)::int AS total,
+      count(*) FILTER (WHERE COALESCE(final_verdict,verdict)='Approved')::int AS approved,
+      count(*) FILTER (WHERE COALESCE(final_verdict,verdict)='Denied')::int AS denied,
+      count(*) FILTER (WHERE COALESCE(final_verdict,verdict)='Escalated')::int AS escalated
+      FROM refund_requests`);
+    res.json(rows[0]);
+  });
   app.get('/api/admin/refunds',async(req,res)=>res.json((await db.query('SELECT * FROM refund_requests ORDER BY created_at DESC LIMIT 100')).rows));
   app.get('/api/admin/refunds/:id/audit',async(req,res)=>{z.uuid().parse(req.params.id);res.json((await db.query('SELECT * FROM audit_logs WHERE request_id=$1 ORDER BY id',[req.params.id])).rows);});
   app.post('/api/admin/refunds/:id/resolve',async(req,res)=>{

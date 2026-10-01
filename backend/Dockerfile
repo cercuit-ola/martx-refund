@@ -6,6 +6,7 @@ COPY frontend/package.json frontend/package.json
 RUN npm ci --workspace backend --omit=dev
 COPY backend backend
 COPY db db
+COPY docs/SCENARIOS.md docs/SCENARIOS.md
 USER node
 EXPOSE 3001
 CMD ["node", "backend/src/server.js"]
