@@ -1,5 +1,9 @@
 # MartX Care — AI-assisted refund support
 
+## About
+
+See the mini app: [MartX Care](https://martx-refund-xcy2.vercel.app/).
+
 A full-stack assessment application that receives customer refund requests, checks stored orders against a defined policy, and returns **Approved**, **Denied**, or **Escalated**. Support staff can inspect decision evidence and resolve requests requiring human review.
 
 **Refunds are simulated. No payment is issued.** Real AI classification is optional at startup but must be enabled and demonstrated to verify the assessment’s AI requirement.
